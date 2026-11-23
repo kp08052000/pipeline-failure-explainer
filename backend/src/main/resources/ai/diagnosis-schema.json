@@ -1,0 +1,55 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "failedStep", "category", "causes", "checks", "fixes", "missingInformation"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["DIAGNOSED", "INSUFFICIENT_EVIDENCE"] },
+    "summary": { "type": "string" },
+    "failedStep": { "type": ["string", "null"], "description": "Pipeline task/step that failed, if identifiable" },
+    "category": {
+      "type": "string",
+      "enum": ["dependency", "build", "test", "authentication", "configuration", "infrastructure", "deployment", "unknown"]
+    },
+    "causes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "explanation", "confidence", "evidenceLines"],
+        "properties": {
+          "title": { "type": "string" },
+          "explanation": { "type": "string" },
+          "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "evidenceLines": { "type": "array", "items": { "type": "integer" } }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "command", "rationale"],
+        "properties": {
+          "action": { "type": "string" },
+          "command": { "type": ["string", "null"] },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+    "fixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "command", "rationale"],
+        "properties": {
+          "action": { "type": "string" },
+          "command": { "type": ["string", "null"] },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+    "missingInformation": { "type": "array", "items": { "type": "string" } }
+  }
+}

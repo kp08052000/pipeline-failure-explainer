@@ -1,0 +1,88 @@
+<header class="topbar">
+  <div>
+    <h1>Pipeline Failure Explainer</h1>
+    <p>Paste a sanitised Azure DevOps pipeline log. Get a grounded diagnosis, checks and fixes.</p>
+  </div>
+  @if (provider(); as p) {
+    <span class="provider" [class.offline]="p === 'offline-rules'" [title]="'Diagnosis provider: ' + p">
+      {{ p === 'offline-rules' ? 'Offline demo rules (no AI key)' : p }}
+    </span>
+  }
+</header>
+
+<main class="layout">
+  <section class="panel input-panel" aria-labelledby="log-heading">
+    <div class="panel-head">
+      <h2 id="log-heading">Pipeline log</h2>
+      @if (diagnosis()) {
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" [attr.aria-selected]="view() === 'input'" [class.on]="view() === 'input'" (click)="view.set('input')">Edit</button>
+          <button type="button" role="tab" [attr.aria-selected]="view() === 'evidence'" [class.on]="view() === 'evidence'" (click)="view.set('evidence')">Evidence</button>
+        </div>
+      }
+    </div>
+
+    <div class="samples" role="group" aria-label="Sample failures">
+      <span class="samples-label">Try a sample:</span>
+      @for (s of samples; track s.id) {
+        <button type="button" class="sample" [class.on]="activeSample() === s.id" (click)="loadSample(s)">{{ s.label }}</button>
+      }
+    </div>
+
+    @if (view() === 'evidence' && diagnosis()) {
+      <app-log-viewer [lines]="analysedLines()" [evidenceLines]="evidenceLines()" [selectedLine]="selectedLine()" />
+    } @else {
+      <textarea
+        aria-label="Pipeline log"
+        spellcheck="false"
+        placeholder="Paste the failing step's log here (remove secrets, hostnames and personal data first)..."
+        [value]="log()"
+        (input)="onInput($event)"
+      ></textarea>
+    }
+
+    <div class="input-foot">
+      <span class="meta" [class.too-long]="tooLong()">
+        {{ lineCount() }} lines · {{ log().length.toLocaleString() }} / {{ maxChars.toLocaleString() }} chars
+      </span>
+      <div class="actions">
+        <button type="button" class="secondary" (click)="clear()" [disabled]="!log() || loading()">Clear</button>
+        <button type="button" class="primary" (click)="analyse()" [disabled]="!canAnalyse()">
+          {{ loading() ? 'Analysing…' : 'Explain failure' }}
+        </button>
+      </div>
+    </div>
+    <p class="notice">
+      Paste sanitised logs only; obvious secrets are also masked server-side.
+      @if (provider() && provider() !== 'offline-rules') {
+        Logs are sent to a third-party AI service ({{ provider() }}).
+      }
+      Suggested commands are never executed.
+    </p>
+  </section>
+
+  <section class="results" aria-label="Diagnosis">
+    @if (error(); as e) {
+      <div class="alert" role="alert">{{ e }}</div>
+    }
+    @if (loading()) {
+      <div class="placeholder" aria-busy="true">
+        <div class="spinner" aria-hidden="true"></div>
+        Reading the log and grounding causes in specific lines…
+      </div>
+    } @else if (diagnosis(); as d) {
+      <app-diagnosis-report [diagnosis]="d" [selectedLine]="selectedLine()" (evidenceSelected)="selectEvidence($event)" />
+    } @else if (!error()) {
+      <div class="placeholder">
+        <h2>No diagnosis yet</h2>
+        <p>Paste a log or pick a sample, then choose <strong>Explain failure</strong>. You will get:</p>
+        <ul>
+          <li>a short summary of what failed</li>
+          <li>likely causes linked to the log lines that support them</li>
+          <li>checks to run first, then fixes</li>
+          <li>what information is missing when the log is not enough</li>
+        </ul>
+      </div>
+    }
+  </section>
+</main>

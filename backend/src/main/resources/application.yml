@@ -1,0 +1,30 @@
+server:
+  # Hosting platforms (Cloud Run, Render, ...) inject PORT; containers set SERVER_ADDRESS=0.0.0.0
+  port: ${PORT:8080}
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  forward-headers-strategy: native
+
+spring:
+  application:
+    name: pipeline-failure-explainer
+
+# Protects the AI quota on public deployments; only POST /api/diagnose is limited
+rate-limit:
+  per-client-per-minute: ${RATE_LIMIT_PER_MINUTE:5}
+  per-day: ${RATE_LIMIT_PER_DAY:200}
+
+ai:
+  # auto = use AI when a key is available (or the preset is local), otherwise the offline rule-based demo provider
+  provider: ${AI_PROVIDER:auto}
+  # openai | ollama | lmstudio | github | gemini | groq | openrouter | mistral (see AiConfig.PRESETS)
+  preset: ${AI_PRESET:openai}
+  # Optional overrides of the preset
+  base-url: ${AI_BASE_URL:}
+  model: ${AI_MODEL:}
+  # Falls back to the preset's own variable, e.g. GEMINI_API_KEY or GITHUB_TOKEN
+  api-key: ${AI_API_KEY:}
+  # Use "api-key" for Azure OpenAI key auth
+  api-key-header: ${AI_API_KEY_HEADER:Authorization}
+  timeout: ${AI_TIMEOUT:60s}
+  # auto = strict json_schema, falling back to json_object for models that reject it
+  response-format: ${AI_RESPONSE_FORMAT:auto}

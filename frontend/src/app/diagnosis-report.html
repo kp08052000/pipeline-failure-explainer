@@ -1,0 +1,117 @@
+@let d = diagnosis();
+
+<section class="card verdict" [class.insufficient]="d.verdict === 'INSUFFICIENT_EVIDENCE'" aria-live="polite">
+  <div class="verdict-head">
+    @if (d.verdict === 'DIAGNOSED') {
+      <span class="badge ok">Diagnosed</span>
+    } @else {
+      <span class="badge warn">Insufficient evidence</span>
+    }
+    <span class="chip">{{ d.category }}</span>
+    @if (d.failedStep) {
+      <span class="chip step" title="Failed step">Step: {{ d.failedStep }}</span>
+    }
+  </div>
+  <h2>Summary</h2>
+  <p class="summary">{{ d.summary }}</p>
+  @if (d.verdict === 'INSUFFICIENT_EVIDENCE') {
+    <p class="hint">
+      The log does not show the underlying error clearly enough to name a cause with confidence. See
+      <strong>Missing information</strong> below for what to add.
+    </p>
+  }
+  @if (d.warnings.length) {
+    <ul class="warnings">
+      @for (w of d.warnings; track w) {
+        <li>{{ w }}</li>
+      }
+    </ul>
+  }
+</section>
+
+@if (d.causes.length) {
+  <section class="card">
+    <h2>Likely causes</h2>
+    @for (cause of d.causes; track cause.title) {
+      <article class="cause">
+        <header>
+          <h3>{{ cause.title }}</h3>
+          <span class="conf" [attr.data-level]="cause.confidence">{{ cause.confidence | lowercase }} confidence</span>
+        </header>
+        <p>{{ cause.explanation }}</p>
+        <div class="evidence-label">Supporting log lines</div>
+        <ul class="evidence">
+          @for (ev of cause.evidence; track ev.line) {
+            <li>
+              <button
+                type="button"
+                class="ev"
+                [class.active]="selectedLine() === ev.line"
+                (click)="evidenceSelected.emit(ev.line)"
+                [attr.aria-label]="'Show line ' + ev.line + ' in log'"
+              >
+                <span class="ln">L{{ ev.line }}</span>
+                <code>{{ ev.text }}</code>
+              </button>
+            </li>
+          }
+        </ul>
+      </article>
+    }
+  </section>
+}
+
+@if (d.checks.length) {
+  <section class="card">
+    <h2>Suggested checks</h2>
+    <p class="sub">Read-only investigations to confirm the cause before changing anything.</p>
+    <ng-container *ngTemplateOutlet="suggestions; context: { $implicit: d.checks }" />
+  </section>
+}
+
+@if (d.fixes.length) {
+  <section class="card">
+    <h2>Suggested fixes</h2>
+    <p class="sub">Apply only after the checks confirm the cause.</p>
+    <ng-container *ngTemplateOutlet="suggestions; context: { $implicit: d.fixes }" />
+  </section>
+}
+
+@if (d.missingInformation.length) {
+  <section class="card missing">
+    <h2>Missing information</h2>
+    <p class="sub">Adding these would make the diagnosis more reliable.</p>
+    <ul>
+      @for (m of d.missingInformation; track m) {
+        <li>{{ m }}</li>
+      }
+    </ul>
+  </section>
+}
+
+<p class="footnote">
+  Analysed {{ d.lineCount }} lines with <code>{{ d.provider }}</code>. Commands are suggestions for a human to review —
+  nothing is executed automatically.
+</p>
+
+<ng-template #suggestions let-items>
+  <ol class="suggestions">
+    @for (s of items; track $index) {
+      <li [class.caution]="s.risk === 'CAUTION'">
+        <div class="action">{{ s.action }}</div>
+        @if (s.rationale) {
+          <div class="rationale">{{ s.rationale }}</div>
+        }
+        @if (s.command) {
+          <div class="cmd">
+            <code>{{ s.command }}</code>
+            <button type="button" class="copy" (click)="copy(s)">{{ copied() === s.command ? 'Copied' : 'Copy' }}</button>
+          </div>
+        }
+        @if (s.risk === 'CAUTION') {
+          <div class="risk" role="note"><strong>Use with caution:</strong> {{ s.riskNote }}</div>
+        }
+      </li>
+    }
+  </ol>
+</ng-template>
