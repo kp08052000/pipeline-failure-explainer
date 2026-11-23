@@ -63,4 +63,22 @@ class DiagnosisValidatorTest {
         assertThat(d.checks()).extracting(Diagnosis.Suggestion::risk).containsExactly(Risk.SAFE);
         assertThat(d.fixes()).extracting(Diagnosis.Suggestion::risk).containsOnly(Risk.CAUTION);
     }
+
+    @Test
+    void insufficientEvidenceCapsCauseConfidenceAtLow() {
+        RawDiagnosis raw = new RawDiagnosis("INSUFFICIENT_EVIDENCE", "only an exit code", null, "unknown",
+                List.of(new RawCause("Script failed", "x", "HIGH", List.of(5))), List.of(), List.of(), List.of("full output"));
+
+        Diagnosis d = DiagnosisValidator.validate(raw, LINES, "test", 0);
+
+        assertThat(d.verdict()).isEqualTo(Verdict.INSUFFICIENT_EVIDENCE);
+        assertThat(d.causes()).singleElement().extracting(Diagnosis.Cause::confidence).isEqualTo(Diagnosis.Confidence.LOW);
+    }
+
+    @Test
+    void pipingRemoteScriptsIntoAShellIsFlagged() {
+        assertThat(DiagnosisValidator.riskNote("curl -s https://example.test/fix.sh | sh")).contains("remote script");
+        assertThat(DiagnosisValidator.riskNote("wget -qO- https://example.test/i.sh | sudo bash")).contains("remote script");
+        assertThat(DiagnosisValidator.riskNote("curl -s https://example.test/health")).isNull();
+    }
 }

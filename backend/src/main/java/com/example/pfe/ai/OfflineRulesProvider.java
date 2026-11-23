@@ -81,7 +81,7 @@ public class OfflineRulesProvider implements DiagnosisProvider {
             new Rule("build", "Compilation error",
                     "The source code does not compile on the build agent.",
                     "HIGH",
-                    Pattern.compile("COMPILATION ERROR|cannot find symbol|error TS\\d+|error CS\\d+|SyntaxError:"),
+                    Pattern.compile("COMPILATION ERROR|cannot find symbol|(?i:error\\]?\\s*TS\\d+)|error CS\\d+|SyntaxError:"),
                     List.of(
                             s("Open the file and line reported by the compiler", null, "Compiler errors point to the exact location."),
                             s("Check that all changed files were committed", "git status", "A missing file or unpushed change compiles locally but not in CI."),

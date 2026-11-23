@@ -25,6 +25,7 @@ class OpenAiDiagnosisProviderTest {
     private final AtomicReference<String> requestBody = new AtomicReference<>();
     private final AtomicReference<String> authHeader = new AtomicReference<>();
     private final AtomicInteger requestCount = new AtomicInteger();
+    private final AtomicInteger overloadedResponses = new AtomicInteger();
     private HttpServer server;
 
     @AfterEach
@@ -47,9 +48,10 @@ class OpenAiDiagnosisProviderTest {
             requestCount.incrementAndGet();
             authHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
             boolean reject = rejectSchema && body.contains("\"json_schema\"");
+            boolean overloaded = overloadedResponses.getAndDecrement() > 0;
             byte[] bytes = (reject ? "{\"error\":\"response_format json_schema not supported\"}" : responseBody)
                     .getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(reject ? 400 : status, bytes.length);
+            exchange.sendResponseHeaders(overloaded ? 503 : reject ? 400 : status, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });
@@ -82,6 +84,28 @@ class OpenAiDiagnosisProviderTest {
 
         provider.diagnose("L1| a\n", List.of("a"));
         assertThat(requestCount.get()).as("remembers the fallback").isEqualTo(3);
+    }
+
+    @Test
+    void retriesTransientOverloadThenSucceeds() throws IOException {
+        overloadedResponses.set(2);
+        OpenAiDiagnosisProvider provider = start(200, chatResponse(MINIMAL), AiEndpoint.ResponseFormat.JSON_SCHEMA, false);
+        provider.retryBaseDelayMillis = 1;
+
+        assertThat(provider.diagnose("L1| a\nL2| b\n", List.of("a", "b")).verdict()).isEqualTo("DIAGNOSED");
+        assertThat(requestCount.get()).isEqualTo(3);
+    }
+
+    @Test
+    void givesUpAfterMaxRetries() throws IOException {
+        overloadedResponses.set(10);
+        OpenAiDiagnosisProvider provider = start(200, chatResponse(MINIMAL), AiEndpoint.ResponseFormat.JSON_SCHEMA, false);
+        provider.retryBaseDelayMillis = 1;
+
+        assertThatThrownBy(() -> provider.diagnose("L1| x\n", List.of("x")))
+                .isInstanceOf(AiProviderException.class)
+                .hasMessageContaining("503");
+        assertThat(requestCount.get()).isEqualTo(3);
     }
 
     @Test

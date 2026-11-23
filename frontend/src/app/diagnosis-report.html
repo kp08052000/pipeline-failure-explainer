@@ -31,7 +31,7 @@
 
 @if (d.causes.length) {
   <section class="card">
-    <h2>Likely causes</h2>
+    <h2>{{ d.verdict === 'DIAGNOSED' ? 'Likely causes' : 'Possible causes' }}</h2>
     @for (cause of d.causes; track cause.title) {
       <article class="cause">
         <header>

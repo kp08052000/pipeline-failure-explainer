@@ -11,6 +11,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.core.JacksonException;
@@ -24,6 +25,8 @@ import tools.jackson.databind.ObjectMapper;
 public class OpenAiDiagnosisProvider implements DiagnosisProvider {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiDiagnosisProvider.class);
+    private static final int MAX_RETRIES = 2;
+    private static final long MAX_RETRY_AFTER_MILLIS = 10_000;
 
     private final AiEndpoint endpoint;
     private final ObjectMapper mapper;
@@ -31,6 +34,7 @@ public class OpenAiDiagnosisProvider implements DiagnosisProvider {
     private final String systemPrompt;
     private final JsonNode schema;
     private volatile boolean schemaUnsupported;
+    long retryBaseDelayMillis = 1_000;
 
     public OpenAiDiagnosisProvider(AiEndpoint endpoint, ObjectMapper mapper) {
         this.endpoint = endpoint;
@@ -48,14 +52,14 @@ public class OpenAiDiagnosisProvider implements DiagnosisProvider {
 
     @Override
     public RawDiagnosis diagnose(String numberedLog, List<String> lines) {
-        HttpResponse<String> response = send(numberedLog, !schemaUnsupported);
+        HttpResponse<String> response = sendWithRetry(numberedLog, !schemaUnsupported);
 
         // 400/422 is how OpenAI-compatible servers typically reject an unsupported response_format.
         if (!schemaUnsupported && endpoint.responseFormat() == ResponseFormat.AUTO
                 && (response.statusCode() == 400 || response.statusCode() == 422)) {
             log.info("{} rejected json_schema output (HTTP {}); falling back to JSON mode", endpoint.name(), response.statusCode());
             schemaUnsupported = true;
-            response = send(numberedLog, false);
+            response = sendWithRetry(numberedLog, false);
         }
 
         if (response.statusCode() / 100 != 2) {
@@ -75,6 +79,37 @@ public class OpenAiDiagnosisProvider implements DiagnosisProvider {
         } catch (JacksonException e) {
             throw new AiProviderException("AI response was not valid diagnosis JSON", e);
         }
+    }
+
+    /** Retries rate-limit (429) and overload (503) responses, which free tiers return often and briefly. */
+    private HttpResponse<String> sendWithRetry(String numberedLog, boolean useSchema) {
+        for (int attempt = 0; ; attempt++) {
+            HttpResponse<String> response = send(numberedLog, useSchema);
+            int status = response.statusCode();
+            if ((status != 429 && status != 503) || attempt >= MAX_RETRIES) {
+                return response;
+            }
+            long delay = retryAfterMillis(response).orElse(retryBaseDelayMillis << attempt);
+            log.info("{} returned HTTP {}; retry {}/{} in {} ms", endpoint.name(), status, attempt + 1, MAX_RETRIES, delay);
+            try {
+                Thread.sleep(delay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AiProviderException("AI request interrupted", e);
+            }
+        }
+    }
+
+    private static Optional<Long> retryAfterMillis(HttpResponse<String> response) {
+        return response.headers().firstValue("Retry-After")
+                .flatMap(v -> {
+                    try {
+                        return Optional.of(Long.parseLong(v.trim()) * 1000);
+                    } catch (NumberFormatException e) {
+                        return Optional.empty();
+                    }
+                })
+                .map(ms -> Math.min(ms, MAX_RETRY_AFTER_MILLIS));
     }
 
     private HttpResponse<String> send(String numberedLog, boolean useSchema) {

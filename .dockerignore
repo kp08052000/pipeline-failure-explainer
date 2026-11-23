@@ -2,6 +2,9 @@
 .gitignore
 .env
 *.md
+docs
+eval
+.github
 backend/target
 backend/src/main/resources/static
 frontend/node_modules

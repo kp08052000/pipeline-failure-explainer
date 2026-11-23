@@ -31,6 +31,7 @@ public final class DiagnosisValidator {
     private record RiskRule(Pattern pattern, String note) {}
 
     private static final List<RiskRule> RISK_RULES = List.of(
+            new RiskRule(Pattern.compile("(?i)\\b(curl|wget|iwr|Invoke-WebRequest)\\b.*\\|\\s*(sudo\\s+)?(ba|z)?sh\\b|\\|\\s*iex\\b"), "Runs a remote script without review; never pipe downloads into a shell."),
             new RiskRule(Pattern.compile("--force\\b|\\bpush\\b.*\\s-f\\b"), "Forces past safety checks; can hide conflicts or overwrite work."),
             new RiskRule(Pattern.compile("--legacy-peer-deps"), "Ignores peer dependency requirements; may ship an untested combination."),
             new RiskRule(Pattern.compile("(?i)-DskipTests|-Dmaven\\.test\\.skip|--skip-tests|--no-tests"), "Skips tests; regressions can reach production."),
@@ -64,6 +65,9 @@ public final class DiagnosisValidator {
         }
 
         boolean insufficient = causes.isEmpty() || "INSUFFICIENT_EVIDENCE".equalsIgnoreCase(raw.verdict());
+        if (insufficient) {
+            causes.replaceAll(c -> new Cause(c.title(), c.explanation(), Confidence.LOW, c.evidence()));
+        }
         List<String> missing = cleanStrings(raw.missingInformation());
         if (insufficient && missing.isEmpty()) {
             missing = List.of("The complete output of the failing step, including the lines before the first ##[error].");
